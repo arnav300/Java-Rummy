@@ -12,6 +12,8 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Panel;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
@@ -23,7 +25,7 @@ import java.awt.event.ActionEvent;
  * @author Robert 
  * 
  */
-public abstract class GameGui extends JFrame implements ActionListener, WindowListener {
+public abstract class GameGui extends JFrame implements ActionListener, KeyListener, WindowListener {
 	
 	 /**
      * The game object.
@@ -72,16 +74,16 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
         Box semiTopPane = new Box(BoxLayout.X_AXIS);
         // create an application-specific GUI component; this is where
         // most of the action will occur
-        Component applComponent = createApplComponent();
+        Component applicationComponent = createApplicationComponent();
         
         // set our background color to match that of the application component
-        topPane.setBackground(applComponent.getBackground());
+        topPane.setBackground(applicationComponent.getBackground());
 
         // create a Box to contain the application-specific portion of
         // the GUI and a "quit" button
         Box contentPane = new Box(BoxLayout.Y_AXIS);
         contentPane.add(Box.createGlue());
-        contentPane.add(applComponent);
+        contentPane.add(applicationComponent);
         contentPane.add(Box.createGlue());
         contentPane.add(Box.createVerticalGlue());
 
@@ -104,7 +106,7 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
      *
      * @return the application-specific component of the GUI
      */
-    protected Component createApplComponent() {
+    protected Component createApplicationComponent() {
         // for now, just return an empty panel.  It is expected that this
         // method will be subclassed
         return new Panel();
@@ -143,12 +145,12 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
      * @param playerId the unique numeric player-id assigned to this
      *  player by the game
      */
-    public void setGui(Game game) {
+    public void setGame(Game game) {
 
     	// Disallow setting game if one is already set
         if (this.game == null) {
             this.game = game; // set game
-            setGuiMore(); // do additional initialization
+            setGameMore(); // do additional initialization
             updateTitle(); // set title
             this.setVisible(true); // show the GUI to the user
         }
@@ -159,7 +161,7 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
      * Performs additional initialization, as required by the GUI.
      *
      */
-    protected void setGuiMore() {
+    protected void setGameMore() {
         // does nothing, but may be overriden by subclasses to do additional
         // initialization
     }
@@ -334,7 +336,24 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
     public void mouseExited(MouseEvent e) {
       // by default, do nothing (i.e., ignore it)
     }
+    
+    @Override
+	public void keyTyped(KeyEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
 
+	@Override
+	public void keyPressed(KeyEvent e) {
+		// TODO Auto-generated method stub
+	}
+
+	@Override
+	public void keyReleased(KeyEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+    
     /**
      * Invoked when the user attempts to close the window from the
      * window's system menu.
@@ -406,6 +425,7 @@ public abstract class GameGui extends JFrame implements ActionListener, WindowLi
     }
 
 
+    
     /**
      * Notifies the player that all players have acknowledged that the game
      * will be "quit". Gives the player last chance to "clean up".  (E.g.,

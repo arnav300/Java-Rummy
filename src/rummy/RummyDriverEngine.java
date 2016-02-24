@@ -26,8 +26,9 @@ public final class RummyDriverEngine {
 		int response = getSelection(selections[0], 
 									"Will this game be played locally or remotely?", 
 									new String[]{"Local", "Remote"});
-
+		
 		driver = new RummyDriver();
+	
 		GamePlayer [] p = null;
 		Game game = null;
 		

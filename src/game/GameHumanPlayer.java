@@ -1,5 +1,7 @@
 package game;
 
+import java.awt.event.ActionListener;
+
 public abstract class GameHumanPlayer implements GamePlayer {
 
     protected Game game;

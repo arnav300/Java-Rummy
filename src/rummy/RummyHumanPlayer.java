@@ -1,13 +1,15 @@
 package rummy;
 
+import java.util.Stack;
 import java.util.Vector;
 
 import javax.swing.JButton;
 
 import game.Game;
 import game.GameGui;
+import game.GameHumanPlayer;
 
-public final class RummyHumanPlayer implements RummyPlayer {
+public final class RummyHumanPlayer extends GameHumanPlayer implements RummyPlayer {
 
 	// Composite items
 	private Vector<Card> hand;
@@ -41,10 +43,13 @@ public final class RummyHumanPlayer implements RummyPlayer {
 	}
 
 	@Override
-	public void requestMove() {
-
+	public void requestMove(){
+		
+		
+		
+		
 	}
-
+	
 	@Override
 	public void notYourMove() {
 
@@ -72,14 +77,13 @@ public final class RummyHumanPlayer implements RummyPlayer {
 
 	@Override
 	public void stateChanged() {
-		// grabs the current state
-		state = (RummyState) game.getState(this, 0);
-		if(state.getCurrentPlayer() == playerId){
-			
-			
-			
-			
-			
+		this.state = (RummyState) game.getState(this, 0);
+		
+		if(this.state.getCurrentPlayer() == playerId){
+			Stack<Card> stock = (Stack<Card>)this.state.getStock();
+			if(stock != null){
+				hand.add(stock.pop());
+			}
 		}
 	}
 
@@ -116,4 +120,12 @@ public final class RummyHumanPlayer implements RummyPlayer {
 		hand = newHand;
 	}
 
+	/**
+	 * Return a copy of the player's hand
+	 * 
+	 * @return
+	 */
+	public Vector<Card> getHand(){
+		return (Vector<Card>)this.hand.clone();
+	}
 }

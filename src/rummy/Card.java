@@ -1,12 +1,14 @@
 package rummy;
 
+import java.util.Comparator;
+
 /**
  * Class to represent card from a traditional deck of cards. 
  * 
  * @author Robert Blatner
  * 
  */
-public class Card {
+public class Card implements Comparator<Card> {
 	private int ID;
     private Rank RANK;
     private Suit SUIT;
@@ -27,7 +29,8 @@ public class Card {
         // Determine rank
         RANK = Rank.createRank(id);
         
-        IMAGE = "images\\default" + String.valueOf(id) + ".txt";
+        if(id < 10) IMAGE = "images//default//0" + id + ".gif";
+        else IMAGE = "images//default//" + id + ".gif";
     }
 
     public String getName() {
@@ -152,7 +155,32 @@ public class Card {
     		else 
     			return null;
     	}
-    } 
+    }
+
+    
+    /**
+     * Implements Comparator's comparison operator for Card class. This
+     * enables Vector<Card>.sort(Card obj).
+     * 
+     * @return a negative integer, zero, or a positive integer as the
+     *         first argument is less than, equal to, or greater than the
+     *         second.
+     * 
+     */
+	@Override
+	public int compare(Card c1, Card c2) {
+
+		return c1.getID() - c2.getID();
+	} 
+	
+	
+	@Override
+	public boolean equals(Object otherCard){
+		
+		if( ((Card)otherCard).ID == this.ID) return true;
+		else return false;
+		
+	}
 
 }
 

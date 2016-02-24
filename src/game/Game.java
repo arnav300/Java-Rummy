@@ -420,7 +420,7 @@ public abstract class Game
     }
 
     /**
-     * Applies an action to the GameImpl object.  Typically called by a player
+     * Applies an action to the Game object.  Typically called by a player
      * who wants to request an action on its behalf.
      *
      * @param the player requesting the action
@@ -610,6 +610,7 @@ class StateChangedInvoker extends PlayerActionInvoker {
      */
     public void invokeAction(GamePlayer player) {
         player.stateChanged();
+        
     }
 }
  

@@ -1,16 +1,15 @@
 package rummy;
 
-import java.util.Hashtable;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Stack;
 import java.util.Vector;
 
 import game.Game;
-import game.GameAction;
 import game.GameMoveAction;
 import game.GamePlayer;
 import game.GameState;
+
+import rummy.RummyMoveDraw.DeckType;
 
 /**
  * Implementation of the rummy game. This class contains game related methods.
@@ -20,24 +19,23 @@ import game.GameState;
  */
 public final class RummyGame extends Game {
 
-	// the gui
+	// The GUI object
 	private RummyGui rummyGui;
 	
-	// Players and player related information
+	// Player related information
 	private int numPlayers;
-	private int sizeOfHand; // determined by numPlayers
-	private RummyPlayer[] player;
-	private Queue<GameAction> actionQueue;
+	private int numCardsPerHand; // determined by numPlayers
+	private Vector<Vector<Card> > hands; // this is typesafe ONLY if its never returned by a method
 	
-	// Stock and Discard piles
+	// Stock and discardPile piles
 	private Stack<Card> stock;
-	private Stack<Card> discard;
+	private Stack<Card> discardPile;
 	
 	// State related parameters
-	private boolean gameStarted;
 	private int currentPlayer;
+	private Vector<Vector<Card> > melds;
 	private Vector<String> chatHistory;
-	private Vector<Move> moveLog;
+	private Vector<Move> moveHistory;
 	private int [] score;
 	private boolean hasWon;
 	
@@ -46,39 +44,51 @@ public final class RummyGame extends Game {
 	
 	private void initGui(){
 		rummyGui = (RummyGui)RummyGui.createRummyGui();
-		rummyGui.setGui(this);
+		rummyGui.setGame(this);
+    	rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.player[0].getId(), this.moveHistory, this.score)); // getState() args not used
 	}
 	
+	@SuppressWarnings("unchecked")
 	protected void initializeGame(){
-		
-    	// Create Gui
-    	initGui();
     	
     	// Create Deck
     	Stack<Card> deck = initializeDeck();
     	
     	// Deal Cards
+    	this.hands = new Vector<Vector<Card> >();
     	for(int i = 0; i < numPlayers; i++){
     		Vector<Card> tempHand = new Vector<Card>();
-    		for(int j = 0; j < sizeOfHand; j++){ 
+    		for(int j = 0; j < numCardsPerHand; j++){ 
     			tempHand.add(deck.pop());
     		}
     		
-    		player[i].setHand(tempHand);
+    		this.hands.addElement(new Vector<Card>(tempHand));
+    		((RummyPlayer)this.player[i]).setHand(tempHand);
     	}
     	
     	// Put remaining cards in stock
-    	stock = new Stack<Card>();
+    	this.stock = new Stack<Card>();
     	while(deck.isEmpty() != true){
-    		stock.push(deck.pop());
+    		this.stock.push(deck.pop());
+    		
     	}
     
-    	// Flip first card of stock for discard pile
-    	discard = new Stack<Card>();
-    	discard.push(stock.pop());
+    	// Flip first card of stock for discardPile pile
+    	this.discardPile = new Stack<Card>();
+    	this.discardPile.push(stock.pop());
     	
+    	// State related information
+    	this.melds = new Vector<Vector<Card> >();
+    	this.chatHistory = null;
+    	this.moveHistory = null;
+    	this.score = new int[numPlayers];
+    	this.hasWon = false;
     	
-    
+    	// Create Gui
+    	initGui();
+    	
+    	notifyAllStateChanged();
+    	
 	}
     
     
@@ -93,19 +103,19 @@ public final class RummyGame extends Game {
     	Stack<Card> deck = new Stack<Card>();
     	
     	Random rg = new Random();
-    	Hashtable<Integer, Boolean> ht = new Hashtable<Integer, Boolean>();
-    	
+    	boolean [] check = new boolean[52];
+    
     	for(int i= 1; i < 52; i++){
 
     		// Generate random value b/w 1 and 52
     		int value = rg.nextInt(52) + 1;
     		
-    		// Probe if next int
-    		while(ht.contains(value) == true) {
+    		// Probe for next available
+    		while(check[value - 1] == true) {
     			value = (value + 1) % 53 + (value + 1)/53;
 
     		}
-    		ht.put(new Integer(value), new Boolean(true));
+    		check[value - 1] = true;
     		
     		// Push new Card
     		deck.push(new Card(value));
@@ -121,19 +131,14 @@ public final class RummyGame extends Game {
 		
         // Based on number of players counted, 
         // determine number of cards player uses
-    	if(numPlayers == 2) this.sizeOfHand = 10;
-		else if(numPlayers <= 4) this.sizeOfHand = 7;
-		else if(numPlayers <= 6) this.sizeOfHand = 6;
+    	if(numPlayers == 2) this.numCardsPerHand = 10;
+		else if(numPlayers <= 4) this.numCardsPerHand = 7;
+		else if(numPlayers <= 6) this.numCardsPerHand = 6;
     	
         this.gameStarted = false;
         this.numPlayers = 0;
         this.player = null;
         
-	}
-
-	@Override
-	public void applyAction(GameAction action) {
-		actionQueue.add(action);
 	}
 
 	@Override
@@ -185,7 +190,7 @@ public final class RummyGame extends Game {
 
 	@Override
 	public int maxPlayersAllowed() {
-		return 6;
+		return 4;
 	}
 
 	/**
@@ -196,17 +201,7 @@ public final class RummyGame extends Game {
 	public int getNumberPlayers(){
 		return numPlayers;
 	}
-	
-	
-	/**
-	 * Accessor method touoe query number per hand.
-	 * 
-	 * @return sizeOfHand
-	 */
-	public int getSizeOfHand(){
-		return sizeOfHand;
-	}
-	
+
 	   /**
      * Tells the numeric position of a player in the game
      *
@@ -232,8 +227,7 @@ public final class RummyGame extends Game {
      * 
      */
     protected void performAfterAllAreReady() {
-    
-    	
+    	//TODO
     }
     
 	@Override
@@ -253,10 +247,11 @@ public final class RummyGame extends Game {
 
 	@Override
 	protected GameState getGameState(GamePlayer p, int stateType) {
-		// TODO Auto-generated method stub
-		return null;
+		RummyState state = new RummyState(stock, this.discardPile, this.hands, this.melds, this.chatHistory, p.getId(), moveHistory, score);
+		state.setHasWon(hasWon);
+		return state;
 	}
-
+	
 	  /**
      * Requests that a move be made on behalf of a player.  Typically, the
      * player that wants to make the move creates a MoveAction object that
@@ -270,105 +265,138 @@ public final class RummyGame extends Game {
      *
      * @param thePlayer The player wishing to make the move.
      * @param move The move object that encodes the requested move
-     * @return true if the move was successfully made; false it it's an
+     * @return true if the move was successfully made; false if it's an
      *  illegal move.
      */
     protected boolean makeMove(GamePlayer thePlayer, GameMoveAction move){
+
+    	currentPlayer = thePlayer.getId();
+    	RummyMoveAction rummyMove = (RummyMoveAction)move;
     	
-    	
-    	
-    	
+    	if(rummyMove instanceof RummyMoveDraw){ // draw 
+    		
+    		DeckType thisDeckType = ((RummyMoveDraw) rummyMove).moveDeckType;
+    		Card cardDrawn = null;
+    		
+    		if(thisDeckType == DeckType.STOCK){
+    			if(this.stock.isEmpty() != true){
+    				cardDrawn = stock.pop();
+    			}
+    			else return false;
+    		}
+    		else if(thisDeckType == DeckType.DISCARD){
+    			if(this.discardPile.isEmpty() != true){
+    				cardDrawn = this.discardPile.pop();
+    			}
+    			else return false;
+    		}
+    		
+    		hands.elementAt(currentPlayer).add(cardDrawn);
+    		
+    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+    		return true;
+    	}
+    	else if(rummyMove instanceof RummyMoveMeld){ // optional move
+
+			Vector<Card> theMeld = null;
+    		if(this.validateMeld(this.currentPlayer, (RummyMoveMeld)rummyMove, theMeld)){ // check 
+        		
+        		int [] indices = ((RummyMoveMeld) rummyMove).getIndices();
+        		
+    			for(int index : indices){
+    				this.hands.elementAt(currentPlayer).remove(index);
+    			}
+    			
+    			this.melds.addElement(theMeld); // if meld valid, add to game's melds
+    		}
+    		
+    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+    		return true;
+    	}
+    	else if(rummyMove instanceof RummyMoveLayoff){ // optional move
+    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+    		return true;
+    	}
+    	else if(rummyMove instanceof RummyMoveDiscard){  // discardPile and end turn
+    		Card discardCard = this.hands.elementAt(currentPlayer).remove(((RummyMoveDiscard)rummyMove).getDiscardIndex());
+    		this.discardPile.push(discardCard);
+    		
+    		// Update current player
+    		currentPlayer = (currentPlayer + 1) % 4;
+    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score)); // getState() args not used
+    		return true;
+    	}
+	
     	return false;
+    	
     }
-}
-
-/**
- * An abstract class specifies an action to perform.
- */
-abstract class PlayerActionInvoker { 
-    /**
-     * The action for this method
-     * 
-     * @param player  the player on which to invoke the action
-     */
-    public abstract void invokeAction(GamePlayer player);
-} 
-       
-/**
- * A class that invokes the 'stateChanged' action.
- */
-class StateChangedInvoker extends PlayerActionInvoker { 
-    /**
-     * The action for this method
-     * 
-     * @param player  the player on which to invoke the action
-     */
-    public void invokeAction(GamePlayer player) {
-        player.stateChanged();
-    }
-}
- 
-/**
- * A class that invokes the 'timeToQuit' action.
- */
-class TimeToQuitInvoker extends PlayerActionInvoker { 
-    /**
-     * The action for this method
-     * 
-     * @param player  the player on which to invoke the action
-     */
-    public void invokeAction(GamePlayer player) {
-        player.timeToQuit();
-    }
-}
-  
-/**
- * A class that invokes the 'gameIsOver' action.
- */
-class GameIsOverInvoker extends PlayerActionInvoker { 
-    /**
-     * The action for this method
-     * 
-     * @param player  the player on which to invoke the action
-     */
-    public void invokeAction(GamePlayer player) {
-        player.gameIsOver();
-    }
-}
-     
-/**
- * A class that helps invoke the 'stateChanged' method on
- * a player, using a separate thread.
- */
-class ParallelNotifier implements Runnable {
-
-    // the player to invoke the action on
-    private GamePlayer myPlayer;
     
-    // the action to perform
-    private PlayerActionInvoker actionObject;
+    /** 
+     * Method to get a player. Intentionally left as package private (this is for GUI)
+     * 
+     * @return RummyPlayer
+     */
+    RummyPlayer getPlayer(int id){
+    	return (RummyPlayer) player[id];
+    }
     
     /**
-     * Constructor for ParallelNotifier
+     * Method used by GUI to check which human player hand to display.
      * 
-     * @param player  the player to invoke the action on
-     * @param pai  the object representing the action to invoke
+     * @return boolean indicating if current player is a human
      */
-    public ParallelNotifier(GamePlayer player, PlayerActionInvoker pai) {
+    public boolean currentIsHuman(){
+    	return (this.player[currentPlayer] instanceof RummyHumanPlayer);
+    }
     
-        // invoke superclass constructor
-        super();
-        
-        // initialize instance variables
-        myPlayer = player;
-        actionObject = pai;
-    }
-
     /**
-     * The code that runs in the separate thread.
+     * 
+     * Method to validate the meld before it can be played.
+     * 
+     * 
+     * @return true if meld valid or false if meld is invalid
      */
-    public void run() {
-        // invoke the appropriate method on the player
-        actionObject.invokeAction(myPlayer);
-    }
-}   
+    public boolean validateMeld(int currentPlayer, RummyMoveMeld rummyMoveMeld, Vector<Card> theMeld){
+		
+		boolean valid = true;
+		int [] indices = rummyMoveMeld.getIndices();
+		
+		if(indices.length >= 3){
+
+			// Check sequence
+			theMeld = new Vector<Card>(); 
+			
+			for(int index : indices){
+				theMeld.addElement(this.hands.elementAt(currentPlayer).get(index));
+			}
+			theMeld.sort(new Card(0));
+			
+			Card prev = theMeld.elementAt(0);
+			Card curr;
+			for(int i = 1; i < theMeld.size(); i++){
+				curr = theMeld.elementAt(i);
+				if(Math.abs(curr.getRank() - prev.getRank()) > 1){
+					valid = false;
+					break;
+				}
+					
+				prev = curr;
+			}
+			
+			// Check group
+			int meldRank = theMeld.elementAt(0).getRank();
+			for(int i = 1; i < theMeld.size(); i++){
+				if(theMeld.elementAt(i).getRank() != meldRank){
+					valid = false;
+					break;
+				}
+			}
+		}
+		else {
+			valid = false;
+		}
+		
+		return valid;
+	}
+    
+}
