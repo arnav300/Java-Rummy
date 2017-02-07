@@ -2,10 +2,13 @@ package rummy;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.util.Collections;
 import java.util.Vector;
 
 import game.GameGui;
 import game.GameState;
+import rummy.Card.Rank;
+import rummy.Card.Suit;
 import rummy.RummyMoveDraw.DeckType;
 
 import javax.swing.AbstractAction;
@@ -13,6 +16,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -23,8 +27,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
+import java.awt.FlowLayout;
 import java.awt.Image;
 
 /**
@@ -44,26 +47,65 @@ public final class RummyGui extends GameGui {
 	
 	JPanel top; // BorderLayout
 	
-	// Gui must have access to game state in order
-	// to update visuals accordings
+	// The GUI must have access to game state in order
+	// to update visuals accordingly
 	RummyState state = null;
 	
 	// Boxes corresponding to position in Border Layout
-	private final int SOUTH = 0; // anyway to turn these into an enum?
+	private final int SOUTH = 0; 
 	private final int EAST = 1;
 	private final int NORTH = 2;
 	private final int WEST = 3;
-	Box [] positionBoxes = new Box[4]; // indices are SOUTH - 0, EAST - 1, NORTH - 2, WEST - 3, values are player IDs
-	Box centerBox = null; // CENTER
+	Box [] positionBoxes = new Box[4];
+	Box centerBox = null;
 	Box meldButtonsBox = null;
 	
 	// Center stuff - melds/layouts, stock/discard, game message text
 	Box cardBox = null;
-	JPanel meldGridBag;
-	GridBagConstraints meldConstraints;
-	Vector<Box> melds;
+	JPanel meldFlowPanel;
+	private final int VERTICAL_GAP = 10;
+	private final int HORIZONTAL_GAP = 10;
 	JButton stockTop;
 	JButton discardPileTop;
+	
+
+	// Player Info - indices are player positions
+	JButton [] playerNames; 
+	JButton [] playerHands; 
+	Box [] playerBoxHands; 
+	
+	// Player Info - indices are player IDs
+	Vector<Vector<Card> > hands;
+	int [] playerPosition; 
+	RummyPlayer [] players;
+	
+	// Move
+	private boolean draw = true;
+	private boolean move = false;
+	private boolean meldActivated = false;
+	private boolean layoutActivated = false;
+	
+	private int numPlayers;
+
+	private static RummyGui rummyGui = null;
+	
+	AbstractDrawAction abstractDrawAction;
+	AbstractMoveActions abstractMoveActions;
+	
+	// Chat related components
+	Box logsBox;
+	JTextField chatField;
+	JTextArea moveLog;
+	JButton sendMessageBtn; 
+	JTextField gameMessageText;
+	
+	// Meld specific components
+	JButton meldActivatedBtn;
+	JButton doMeldBtn;
+	Vector<Card> theMeld;
+	
+	// Layout specific components
+	JButton meldSelectedButton; 
 	
 	/**
 	 * Class to handle action events for stockTop and discardPileTop.
@@ -85,21 +127,16 @@ public final class RummyGui extends GameGui {
 						((RummyGame)game).applyAction(new RummyMoveDraw(rp, (source == stockTop) ? DeckType.STOCK : DeckType.DISCARD));
 						move = true;
 						draw = false;
-						meldLayoutBtn.setEnabled(true);
+						meldActivatedBtn.setEnabled(true);
 					}
 				}
 			}	
 			
 		}
 	}
-	AbstractDrawAction abstractDrawAction;
-	
-	JTextField gameMessageText;
-	JButton meldLayoutBtn;
-	JButton doMeldBtn;
-	Vector<Card> theMeld;
+
 	/**
-	 * Class to handle meld related action events.
+	 * Class to handle meld/layout/discard related action events.
 	 * @author Robert
 	 *
 	 */
@@ -111,9 +148,9 @@ public final class RummyGui extends GameGui {
 		 * Helper method to get the index of the card corresponding
 		 * to the selected JButton 
 		 * 
-		 * @param the card id (i.e. a number from 1-52)
-		 * @return -1 if source doesn't exist in the hand, else an Integer
-		 * 			containing the index of the source in the hand.
+		 * @param the card id (i.e. a number from 1-52; IDs are unique)
+		 * @return -1 if source doesn't exist in the hand, else an 'int'
+		 * 			that is the index of the source in the hand
 		 */
 		private int getSelectedCardIndex(int ID){
 			
@@ -130,41 +167,74 @@ public final class RummyGui extends GameGui {
 			return index;
 		}
 		
+		/**
+		 * Helper method to get the index of the meld in ((RummyGame)game).melds.
+		 * It takes advantage of the fact that the representation of the meld as
+		 * a JButton object is also represented as a Vector<Card> object in 
+		 * ((RummyGame)game).melds.
+		 * 
+		 * The method iterates through all objects of the meldFlowPanel. If 
+		 * the object is a JButton, 'index' is incremented. If the object is 
+		 * the button that is selected, the iterating quits and 'index' will
+		 * be set to index of the meld in ((RummyGame)game).melds. 
+		 * 
+		 * @param the meld as a JButton
+		 * @return the index of the meld as an 'int'
+		 */
+		private int getSelectedMeldIndex(Object source){
+			int index = -1;
+			
+			for(int i = 0; i < meldFlowPanel.getComponentCount(); i++){
+				Object component = meldFlowPanel.getComponent(i);
+				if( component instanceof JButton ) {
+					index++;
+					if ( component == source) {	
+						break;
+					}
+				}
+			}
+			
+			return index;
+		}
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
 
 			Object source = e.getSource();
-			RummyPlayer rp = getCurrentPlayer();
+			RummyPlayer currentPlayer = getCurrentPlayer();
 			
-			if(rp instanceof RummyHumanPlayer){
-				if(move == true) { // Meld/Layout/Discard
-					if(meldLayout == true){
-						if(source == meldLayoutBtn){ // Exit meld/layout mode
+			if(currentPlayer instanceof RummyHumanPlayer){
+				
+				if(move == true) {
+				
+					// Meld
+					if(meldActivated == true){
+						
+						// Activate meld mode
+						if(source == meldActivatedBtn){
 							theMeld.removeAllElements();
-							meldLayoutBtn.setText("Meld/Layout");
+							meldActivatedBtn.setText("Meld/Layout");
 							doMeldBtn.setEnabled(false);
 							gameMessageText.setText("Player " + getCurrentPlayer().getId() + " didn't select cards for a meld!");
-							meldLayout = false;
+							meldActivated = false;
 						}
-						else if(source == doMeldBtn){ // do meld
+						
+						// Do meld
+						else if(source == doMeldBtn){ 
 							
-							int [] indices = new int[theMeld.size()];
-							for(int i = 0; i < theMeld.size(); i++){
-								indices[i] = getSelectedCardIndex(theMeld.elementAt(i).getID());
-							}
-							
-							((RummyGame)game).applyAction(new RummyMoveMeld(rp, indices));
+							((RummyGame)game).applyAction(new RummyMoveMeld(currentPlayer, (Vector<Card>)theMeld.clone()) );
 							
 							theMeld.removeAllElements();
-							meldLayoutBtn.setText("Meld/Layout");
+							meldActivatedBtn.setText("Meld/Layout");
 							doMeldBtn.setEnabled(false);
 							gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to make a move.");
-							meldLayout = false;
+							meldActivated = false;
 						}
+						
+						// Append reference of selected card to meld
 						else if( ((JButton)source).getParent().getClass() == Box.class && 
-								(Box) ((JButton)source).getParent() == playerBoxHands[SOUTH]){ // collect cards for meld
-									
+								(Box) ((JButton)source).getParent() == playerBoxHands[SOUTH]){
+							
 							Card value = new Card( Integer.valueOf(((JButton)source).getName()) );
 							if( theMeld.contains(value) != true){
 								theMeld.addElement(value);
@@ -175,36 +245,64 @@ public final class RummyGui extends GameGui {
 								theMeld.remove(value); // still need to remove card name from gameMessageText !!!!!!
 							}
 						}
-						else if ( ((JPanel)((JButton)source).getParent()) == meldGridBag) { // do layout
+					}
+					
+					
+					else if(layoutActivated == true) {
+						
+						
+						if ( ((JButton)source).getParent() instanceof JPanel && 
+						      (JPanel) ((JButton)source).getParent() == meldFlowPanel)  { // Meld selected
+								
+								gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to make a move.");
+								layoutActivated = false;
+						}
+						
+						// Activate layout mode (by selecting a meld currently on the table)
+						// And save reference of selected meld
+						else if ( ((JButton)source).getParent() instanceof Box &&
+							 ((Box) ((JButton)source).getParent() ) == playerBoxHands[SOUTH]) { // Meld selected
 							
-							// Check if valid layout ?
-							//((RummyGame)game).applyAction(new RummyMoveMeld(rp, indices));
+							int cardIndex = getSelectedCardIndex( Integer.valueOf(((JButton)source).getName()) );
+							int meldIndex = getSelectedMeldIndex( meldSelectedButton );
 							
-							theMeld.removeAllElements();
-							meldLayoutBtn.setText("Meld/Layout");
-							doMeldBtn.setEnabled(false);
+							((RummyGame)game).applyAction(new RummyMoveLayoff(currentPlayer, meldSelectedButton, meldIndex, cardIndex));
+							
 							gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to make a move.");
-							meldLayout = false;
-							
+							layoutActivated = false;
 						}
 
 					}
-					else if (meldLayout == false){
+					else if (meldActivated == false && layoutActivated == false){
 						
-						if( (Box) ((JButton)source).getParent() == playerBoxHands[SOUTH]) { // Discard
-
+						// Perform discard move
+						if( ((JButton)source).getParent() instanceof Box &&
+								(Box) ((JButton)source).getParent() == playerBoxHands[SOUTH]) {
+							
 							int index = getSelectedCardIndex( Integer.valueOf(((JButton)source).getName()) );
 
-							((RummyGame)game).applyAction(new RummyMoveDiscard(rp, index));
-							meldLayoutBtn.setEnabled(false);
+							((RummyGame)game).applyAction(new RummyMoveDiscard(currentPlayer, index));
+							meldActivatedBtn.setEnabled(false);
 							move = false;
 							draw = true;
 						}
-						else if (source == meldLayoutBtn ){ // Enter Meld/Layout mode
-							meldLayoutBtn.setText("Exit " + meldLayoutBtn.getText());
+						
+						// Activate layout mode (by selecting a meld currently on the table)
+						// and save reference of selected meld
+						else if ( ((JButton)source).getParent() instanceof JPanel && 
+								  (JPanel) ((JButton)source).getParent() == meldFlowPanel) { // Enter layout mode
+							
+							meldSelectedButton = (JButton)source;
+							gameMessageText.setText(gameMessageText.getText() + "\nChoose a card to layout: ");
+							layoutActivated = true;
+						}
+						
+						// Activate meld mode
+						else if (source == meldActivatedBtn ){
+							meldActivatedBtn.setText("Exit " + meldActivatedBtn.getText());
 							doMeldBtn.setEnabled(true);
-							gameMessageText.setText(gameMessageText.getText() + "\nChoose cards to meld/layout: ");
-							meldLayout = true;
+							gameMessageText.setText(gameMessageText.getText() + "\nChoose cards to meld: ");
+							meldActivated = true;
 						}
 
 					}
@@ -214,13 +312,6 @@ public final class RummyGui extends GameGui {
 		}
 	}
 
-	AbstractMoveActions abstractMoveActions;
-	
-	// Move/Chat Log
-	JTextField chatField;
-	JTextArea moveLog;
-	Box logsBox;
-	JButton sendMessageBtn;
 	/**
 	 * Class to handle chat field/move log related action events. 
 	 * @author Robert
@@ -230,32 +321,11 @@ public final class RummyGui extends GameGui {
 	private class AbstractSendMessageAction extends AbstractAction {
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			moveLog.setText(moveLog.getText() + "\n" + chatField.getText());
+			moveLog.setText(moveLog.getText() + "\n" + "Player " + Integer.toString(state.getCurrentPlayer()) + ": " + chatField.getText());
 			moveLog.setCaretPosition(moveLog.getDocument().getLength());
 			chatField.setText("");
-			
 		}
 	}
-	
-	// Player Info - indices are player positions
-	JButton [] playerNames; 
-	JButton [] playerHands; 
-	Box [] playerBoxHands; 
-	
-	// Player Info - indices are player IDs
-	Vector<Vector<Card> > hands;
-	int [] playerPosition; 
-	RummyPlayer [] players;
-	
-	
-	// Move
-	private boolean draw = true;
-	private boolean move = false;
-	private boolean meldLayout = false;
-	
-	private int numPlayers;
-
-	private static RummyGui rummyGui = null;
 	
 	private RummyGui() {
 		super();
@@ -313,11 +383,8 @@ public final class RummyGui extends GameGui {
 		
 		// ... set image of discard pile in stateChanged()
 		
-	
 		// Meld utilities
-//		this.MeldBox = 
 		this.theMeld = new Vector<Card>();
-		this.melds = new Vector<Box>();
 		
 		// Center info
 		abstractMoveActions = new AbstractMoveActions();
@@ -326,36 +393,35 @@ public final class RummyGui extends GameGui {
 		this.doMeldBtn = new JButton("Play Meld");
 		this.doMeldBtn.setEnabled(false);
 		this.doMeldBtn.addActionListener(abstractMoveActions);
-		this.meldGridBag = new JPanel();
-		this.meldGridBag.setLayout(new GridBagLayout());
-		this.meldGridBag.setBorder(BorderFactory.createStrokeBorder(new BasicStroke(1.5f)));
-		this.meldConstraints = new GridBagConstraints();
-		this.meldConstraints.ipadx = 2;
-		this.meldConstraints.ipady = 2;
+		this.meldFlowPanel = new JPanel();
+		this.meldFlowPanel.setLayout(new FlowLayout());
+		this.meldFlowPanel.setBorder(BorderFactory.createStrokeBorder(new BasicStroke(1.5f)));
+		((FlowLayout)this.meldFlowPanel.getLayout()).setHgap(HORIZONTAL_GAP);
+		((FlowLayout)this.meldFlowPanel.getLayout()).setVgap(VERTICAL_GAP);
 		this.cardBox = Box.createHorizontalBox();
 		this.gameMessageText = new JTextField();
 		this.gameMessageText.setBorder(null);
-		this.meldLayoutBtn = new JButton("Meld/Layout");
-		this.meldLayoutBtn.setEnabled(false);
-		this.meldLayoutBtn.addActionListener(abstractMoveActions);
-		this.meldLayoutBtn.addKeyListener(this);
+		this.meldActivatedBtn = new JButton("Meld/Layout");
+		this.meldActivatedBtn.setEnabled(false);
+		this.meldActivatedBtn.addActionListener(abstractMoveActions);
+		this.meldActivatedBtn.addKeyListener(this);
 		
 		this.centerBox.add(Box.createVerticalStrut(10));
-		this.centerBox.add(this.meldGridBag);
+		this.centerBox.add(this.meldFlowPanel);
 		this.centerBox.add(Box.createVerticalStrut(10));
 		this.centerBox.add(this.cardBox);
 		this.centerBox.add(Box.createVerticalStrut(5));
 		this.centerBox.add(this.gameMessageText);
 		this.centerBox.add(Box.createVerticalStrut(5));
 		this.meldButtonsBox.setAlignmentX(Box.CENTER_ALIGNMENT);
-		this.meldButtonsBox.add(this.meldLayoutBtn);
+		this.meldButtonsBox.add(this.meldActivatedBtn);
 		this.meldButtonsBox.add(Box.createHorizontalStrut(5));
 		this.meldButtonsBox.add(this.doMeldBtn);
 		this.centerBox.add(this.meldButtonsBox);
 		this.centerBox.add(Box.createVerticalStrut(10));
 		
 		// Get game information and allocate buttons
-		numPlayers = ((RummyGame)game).getNumberPlayers(); 
+		numPlayers = ((RummyGame)game).getNumberPlayers();
 		
 		this.playerNames = new JButton[numPlayers];
 		this.playerHands = new JButton[numPlayers];
@@ -426,12 +492,16 @@ public final class RummyGui extends GameGui {
 		this.sendMessageBtn.addActionListener(new AbstractSendMessageAction());
 		
 		this.moveLog.setBorder(BorderFactory.createLineBorder(Color.black));
-		JScrollPane sp = new JScrollPane(this.moveLog);
-		sp.setMinimumSize(new Dimension(this.moveLog.getWidth(), this.moveLog.getHeight()));
+		this.moveLog.setLineWrap(true);
+		this.moveLog.setWrapStyleWord(true);
+		
+		JScrollPane moveLogScrollPane = new JScrollPane(this.moveLog);
+		moveLogScrollPane.setMinimumSize(new Dimension(this.moveLog.getWidth(), this.moveLog.getHeight()));
+		
 		
 		this.logsBox.add(this.chatField);
 		this.logsBox.add(this.sendMessageBtn);
-		this.logsBox.add(sp);
+		this.logsBox.add(moveLogScrollPane);
 		this.positionBoxes[SOUTH].add(Box.createHorizontalGlue());
 		this.positionBoxes[SOUTH].add(this.logsBox);
 		
@@ -490,23 +560,32 @@ public final class RummyGui extends GameGui {
     		gameMessage = "make a move.";
     	}
     	
-    	// Update melds/layouts area
+    	// Update melds/layouts area - melds will be displayed as pairs of characters that
+    	// represent suit/rank (e.g. C4 is 4 of clubs, H13 is king of hearts etc.)
     	Vector<Card> meld = null;
+    	
+    	this.meldFlowPanel.removeAll();
+    	int rowWidth = 0;
+    	int rowHeight = 0;
     	for(int i = 0; (meld = this.state.getMeld(i)) != null; i++ ){
-    		Box tempBox = Box.createHorizontalBox();
-    		for(Card c : meld){
-    			ImageIcon cardFace = new ImageIcon( c.getImage());
-    			//Image image = cardFace.getImage().getScaledInstance((int)this.stockTop.getPreferredSize().getWidth(), (int)this.stockTop.getPreferredSize().getHeight(), Image.SCALE_SMOOTH);
-    			
-    			JButton temp = new JButton(cardFace);
-				Dimension dim = new Dimension(cardFace.getIconWidth(), cardFace.getIconHeight());
-				temp.setName(Integer.toString(c.getID()) ); 
-				temp.setPreferredSize(dim);
-				temp.addActionListener(abstractMoveActions);
-    			tempBox.add(temp);
+    	
+    		JButton tempButton = new JButton(convertVectorToText(meld));
+    		tempButton.addActionListener(abstractMoveActions);
+    		Dimension defaultDim = tempButton.getPreferredSize();
+    		
+    		rowWidth += defaultDim.getWidth() + HORIZONTAL_GAP;
+    		rowHeight = (int) Math.max(rowHeight, defaultDim.getHeight() + VERTICAL_GAP);
+    		if(rowWidth > meldFlowPanel.getWidth()){
+    			rowHeight += defaultDim.getHeight() + VERTICAL_GAP; // 10 is size of vertical strut
+    			rowWidth = 0;
+    			this.meldFlowPanel.add(Box.createVerticalStrut(VERTICAL_GAP));
     		}
-    		this.meldGridBag.add(tempBox, this.meldConstraints); 
+    		
+    		this.meldFlowPanel.add(tempButton); 
+    		this.meldFlowPanel.add(Box.createHorizontalStrut(HORIZONTAL_GAP));
     	}
+    	
+    	this.meldFlowPanel.setPreferredSize(new Dimension(meldFlowPanel.getWidth(), rowHeight));
     	
     	// Update stock pile
     	if(stock.isEmpty() == true){ // Stock empty
@@ -536,14 +615,6 @@ public final class RummyGui extends GameGui {
 		this.cardBox.add(this.stockTop);
 		this.cardBox.add(Box.createRigidArea(new Dimension(10, 0)));
 		this.cardBox.add(this.discardPileTop);
-
-		// Update game message
-		this.gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to " + gameMessage);
-		Dimension dim = new Dimension(centerBox.getWidth(),30);
-		this.gameMessageText.setPreferredSize(dim);
-		this.gameMessageText.setMaximumSize(dim);
-		this.gameMessageText.setOpaque(false);
-		this.gameMessageText.setHorizontalAlignment(JTextField.CENTER);
 		
     	// Swap player at position SOUTH with current player
     	for(int i = 0; i < numPlayers; i++){
@@ -573,18 +644,14 @@ public final class RummyGui extends GameGui {
 			this.playerBoxHands[this.playerPosition[i]].removeAll();
     		
     		if(this.playerPosition[i] == SOUTH){ // face up cards
+    			
+    			hand.sort(new Card(0));
+    			
     	    	for(Card c: hand){
     				ImageIcon cardFace = new ImageIcon(c.getImage());
     		
-    				int ratio = cardFace.getIconHeight()/cardFace.getIconWidth();
-    				int width = WINDOW_SIZE/(hand.size() + 2);
-    				int height = width * ratio;
-    				
-    				Image image = cardFace.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH);	
-    				cardFace = new ImageIcon(image);
-    				
     				JButton temp = new JButton(cardFace);
-    				dim = new Dimension(cardFace.getIconWidth(), cardFace.getIconHeight());
+    				Dimension dim = new Dimension(cardFace.getIconWidth(), cardFace.getIconHeight());
     				temp.setName(Integer.toString(c.getID()) ); // Used to identify card for discard in actionPerformed()
     				temp.setPreferredSize(dim);
     				temp.setMaximumSize(dim);
@@ -605,7 +672,7 @@ public final class RummyGui extends GameGui {
     					backCard = new ImageIcon("images/default/00.gif");	
     				}
 					JButton temp = new JButton(backCard);
-					dim = new Dimension(backCard.getIconWidth(), backCard.getIconHeight());
+					Dimension dim = new Dimension(backCard.getIconWidth(), backCard.getIconHeight());
 					temp.setPreferredSize(dim);
 					temp.setMaximumSize(dim);
 					temp.setMinimumSize(dim);
@@ -614,7 +681,32 @@ public final class RummyGui extends GameGui {
     			
     		}
     	}
-    
+    	
+    	// Check for winner
+    	for(int i = 0; i < numPlayers; i++ ){
+	    	if( this.state.getHand( i ).size() == 0){
+	    		this.state.setHasWon(true);
+	    		
+		    	String title = "Player " + String.valueOf(state.getCurrentPlayer()) + " is the winner!";
+		    	String prompt = "We have a winner!";
+		    	JOptionPane.showMessageDialog(null,
+									          title,
+									          prompt,
+									          JOptionPane.PLAIN_MESSAGE);
+				
+		    	this.dispose();
+		    	System.exit(0);
+	    	}
+    	}
+    	
+		// Update game message
+		this.gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to " + gameMessage);
+		Dimension dim = new Dimension(centerBox.getWidth(),30);
+		this.gameMessageText.setPreferredSize(dim);
+		this.gameMessageText.setMaximumSize(dim);
+		this.gameMessageText.setOpaque(false);
+		this.gameMessageText.setHorizontalAlignment(JTextField.CENTER);
+	
     	resetTop();
     }
     
@@ -638,14 +730,14 @@ public final class RummyGui extends GameGui {
 				this.chatField.setText("");
 			}
 		}
-		else if(e.getKeyChar() == 27){ // esc in meld/layout mode
-			if(meldLayout == true){
+		else if(e.getKeyChar() == 27){ // esc in meld mode
+			if(meldActivated == true){
 				// TODO
 				theMeld.removeAllElements();
-				meldLayoutBtn.setText("Meld/Layout");
+				meldActivatedBtn.setText("Meld/Layout");
 				doMeldBtn.setEnabled(false);
 				gameMessageText.setText("Player " + getCurrentPlayer().getId() + "'s turn to make a move.");
-				meldLayout = false;
+				meldActivated = false;
 			}
 		}
 	} 
@@ -659,7 +751,58 @@ public final class RummyGui extends GameGui {
 		// TODO Auto-generated method stub
 		
 	}
+	
+	/**
+     * Converts text, which represents cards, to a Vector<Card>.
+     * @parameter text, as string, that represents cards (e.g. "C1 S12 D3 H5")
+     * @return Vector<Card>
+     */
+	public Vector<Card> convertTextToVector(String text){
+		
+		String [] cardSequence = text.split(" ");
+		Vector<Card> meld = new Vector<Card>();
+		int cardCount = cardSequence.length;
+		
+		// Convert sequences, such as 'C13 D3 S11', to array of Card objects
+		for(int i = 0; i < cardCount; i++){
 
+			// Get suit
+			char suit = cardSequence[i].charAt(0);
+
+			// Get rank - while loop to grab all digits of 2 digit ranks
+			int numChars = cardSequence[i].length();
+			
+			int rank = 0;
+			if(numChars == 2) {
+				rank = cardSequence[i].charAt(1) - 48;
+			}
+			else if(numChars == 3) {
+				rank += (cardSequence[i].charAt(1) - 48) * 10;
+				rank += (cardSequence[i].charAt(2) - 48);
+			}
+			
+			Card newCard = new Card(Suit.createSuit(suit),Rank.createRank(rank));
+			meld.add(newCard);
+		}
+		
+		return meld;
+	}
+
+	/**
+     * Converts a Vector<Card> to text, which contains text representing a cards.
+     * @parameter Vector<Card>
+     * @return text, as string, that represents cards (e.g. "C1 S12 D3 H5")
+     */
+	public String convertVectorToText(Vector<Card> cardsAsVector){
+
+		StringBuffer textBuffer = new StringBuffer();
+		for(Card card : cardsAsVector){
+			char suit = card.getSuit().toChar();
+			textBuffer.append(suit + Integer.toString(card.getRank()) + " ");
+		}
+		
+		return textBuffer.toString();
+	}
 	
 }
 

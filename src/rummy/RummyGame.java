@@ -1,14 +1,16 @@
 package rummy;
 
+import java.util.Collections;
 import java.util.Random;
 import java.util.Stack;
 import java.util.Vector;
+
+import javax.swing.JButton;
 
 import game.Game;
 import game.GameMoveAction;
 import game.GamePlayer;
 import game.GameState;
-
 import rummy.RummyMoveDraw.DeckType;
 
 /**
@@ -27,7 +29,7 @@ public final class RummyGame extends Game {
 	private int numCardsPerHand; // determined by numPlayers
 	private Vector<Vector<Card> > hands; // this is typesafe ONLY if its never returned by a method
 	
-	// Stock and discardPile piles
+	// Stock and discardPile
 	private Stack<Card> stock;
 	private Stack<Card> discardPile;
 	
@@ -39,16 +41,12 @@ public final class RummyGame extends Game {
 	private int [] score;
 	private boolean hasWon;
 	
-	// print "debug" messages about the entries in the queue
-    private static boolean MONITORQUEUE = false;
-	
 	private void initGui(){
-		rummyGui = (RummyGui)RummyGui.createRummyGui();
-		rummyGui.setGame(this);
-    	rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.player[0].getId(), this.moveHistory, this.score)); // getState() args not used
+		this.rummyGui = (RummyGui)RummyGui.createRummyGui();
+		this.rummyGui.setGame(this);
+    	this.rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.player[0].getId(), this.moveHistory, this.score)); // getState() args not used
 	}
 	
-	@SuppressWarnings("unchecked")
 	protected void initializeGame(){
     	
     	// Create Deck
@@ -273,7 +271,7 @@ public final class RummyGame extends Game {
     	currentPlayer = thePlayer.getId();
     	RummyMoveAction rummyMove = (RummyMoveAction)move;
     	
-    	if(rummyMove instanceof RummyMoveDraw){ // draw 
+    	if(rummyMove instanceof RummyMoveDraw){
     		
     		DeckType thisDeckType = ((RummyMoveDraw) rummyMove).moveDeckType;
     		Card cardDrawn = null;
@@ -293,37 +291,72 @@ public final class RummyGame extends Game {
     		
     		hands.elementAt(currentPlayer).add(cardDrawn);
     		
-    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+    		this.rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
     		return true;
     	}
-    	else if(rummyMove instanceof RummyMoveMeld){ // optional move
-
-			Vector<Card> theMeld = null;
-    		if(this.validateMeld(this.currentPlayer, (RummyMoveMeld)rummyMove, theMeld)){ // check 
+    	else if(rummyMove instanceof RummyMoveMeld){
+    		
+    		if(this.validateMeld( ((RummyMoveMeld)rummyMove).getMeld() ) == true){
+   
+    			Vector<Card> meldVector = ((RummyMoveMeld) rummyMove).getMeld();
         		
-        		int [] indices = ((RummyMoveMeld) rummyMove).getIndices();
-        		
-    			for(int index : indices){
-    				this.hands.elementAt(currentPlayer).remove(index);
+        		// Collect and remove cards from current player's hand	
+    			for(int i = 0; i < meldVector.size(); i++){
+    				for(int j = 0; j < this.hands.elementAt(currentPlayer).size(); j++) {
+    					if(meldVector.elementAt(i).getID() == this.hands.elementAt(currentPlayer).get(j).getID()){
+    						this.hands.elementAt(currentPlayer).remove(j);
+    					}
+    				}
     			}
     			
-    			this.melds.addElement(theMeld); // if meld valid, add to game's melds
+    			// Sort
+    			Collections.sort(meldVector, new Card(0));
+    			
+    			// Add to game's melds
+    			this.melds.addElement(meldVector);
     		}
+    		else {
+    			this.rummyGui.gameMessageText.setText("Player " + this.rummyGui.state.getCurrentPlayer() + " didn't select cards for a valid meld!");
+        	}
     		
-    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+    		this.rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
     		return true;
     	}
-    	else if(rummyMove instanceof RummyMoveLayoff){ // optional move
-    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
-    		return true;
+    	else if(rummyMove instanceof RummyMoveLayoff){
+    		
+    		// Validate that card fits with current meld
+    		JButton meldButton = ((RummyMoveLayoff)rummyMove).getMeldButton();
+    		Vector<Card> meldVector = this.rummyGui.convertTextToVector(meldButton.getText());
+    		Card selectedCard = this.hands.elementAt(currentPlayer).get( ((RummyMoveLayoff)rummyMove).getCardIndex());
+    		meldVector.addElement(selectedCard);
+    		
+    		if(this.validateMeld(meldVector) == true){
+    			
+    			// Sort meld
+    			Collections.sort(meldVector, new Card(0));
+    			
+	    		// Remove selected card from hand
+    			int cardIndex = ((RummyMoveLayoff)rummyMove).getCardIndex();
+    			this.hands.elementAt(currentPlayer).remove(cardIndex);
+    			
+    			// Replace old meld with new meld
+    			int meldIndex = ((RummyMoveLayoff)rummyMove).getMeldIndex();
+    			this.melds.set(meldIndex, meldVector);
+	    		
+	    		this.rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score));
+	    		return true;
+    		}
+    		else {
+    			this.rummyGui.gameMessageText.setText("Player " + this.rummyGui.state.getCurrentPlayer() + " didn't make selections for a valid layoff!");
+    		}
     	}
-    	else if(rummyMove instanceof RummyMoveDiscard){  // discardPile and end turn
+    	else if(rummyMove instanceof RummyMoveDiscard){
     		Card discardCard = this.hands.elementAt(currentPlayer).remove(((RummyMoveDiscard)rummyMove).getDiscardIndex());
     		this.discardPile.push(discardCard);
     		
     		// Update current player
     		currentPlayer = (currentPlayer + 1) % 4;
-    		rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score)); // getState() args not used
+    		this.rummyGui.stateChanged(new RummyState(this.stock, this.discardPile, this.hands, this.melds, this.chatHistory, this.currentPlayer, this.moveHistory, this.score)); // getState() args not used
     		return true;
     	}
 	
@@ -349,54 +382,74 @@ public final class RummyGame extends Game {
     	return (this.player[currentPlayer] instanceof RummyHumanPlayer);
     }
     
+    
     /**
-     * 
-     * Method to validate the meld before it can be played.
-     * 
-     * 
-     * @return true if meld valid or false if meld is invalid
+     * Helper method for validateMeld()
+     * @param meldAsRanks
+     * @return true if meld is sequence, else false
      */
-    public boolean validateMeld(int currentPlayer, RummyMoveMeld rummyMoveMeld, Vector<Card> theMeld){
-		
-		boolean valid = true;
-		int [] indices = rummyMoveMeld.getIndices();
-		
-		if(indices.length >= 3){
-
-			// Check sequence
-			theMeld = new Vector<Card>(); 
-			
-			for(int index : indices){
-				theMeld.addElement(this.hands.elementAt(currentPlayer).get(index));
+    private boolean checkForSequence(Vector<Integer> meldAsRanks){
+    	
+    	boolean valid = true;
+    	
+    	Integer previous = meldAsRanks.elementAt(0);
+		Integer current;
+		for(int i = 1; i < meldAsRanks.size(); i++){
+			current = meldAsRanks.elementAt(i);
+			int difference = Math.abs(current - previous);
+			if(difference != 1){
+				valid = false;
+				break;
 			}
-			theMeld.sort(new Card(0));
-			
-			Card prev = theMeld.elementAt(0);
-			Card curr;
-			for(int i = 1; i < theMeld.size(); i++){
-				curr = theMeld.elementAt(i);
-				if(Math.abs(curr.getRank() - prev.getRank()) > 1){
-					valid = false;
-					break;
-				}
-					
-				prev = curr;
-			}
-			
-			// Check group
-			int meldRank = theMeld.elementAt(0).getRank();
-			for(int i = 1; i < theMeld.size(); i++){
-				if(theMeld.elementAt(i).getRank() != meldRank){
-					valid = false;
-					break;
-				}
-			}
-		}
-		else {
-			valid = false;
+				
+			previous = current;
 		}
 		
 		return valid;
+    }
+    
+    /**
+     * Helper method for validateMeld().
+     * @param meldAsRanks
+     * @return true if meld is group, else false
+     */
+    private boolean checkForGroup(Vector<Integer> meldAsRanks){
+    
+		boolean valid = true;
+		
+		Integer meldRank = meldAsRanks.elementAt(0);
+		for(int i = 1; i < meldAsRanks.size(); i++){
+			if(meldRank != meldAsRanks.elementAt(i)){
+				valid = false;
+				break;
+			}
+	
+		}
+		return valid;
 	}
+    
+    /**
+     * Method to validate the meld before it can be played.
+     * @return true if meld valid or false if meld is invalid
+     */
+    public boolean validateMeld( Vector<Card> meld ){
+    	
+		if(meld.size() >= 3){
+			
+			// Reorganize cards according to Rank			
+			Vector<Integer> meldAsRanks = new Vector<Integer>();
+			
+			for(int i = 0; i < meld.size(); i++){
+				meldAsRanks.addElement(meld.elementAt(i).getRank());
+			}
+			Collections.sort(meldAsRanks);
+			
+			// Helper functions determine if sequence or group
+			return checkForSequence(meldAsRanks) | checkForGroup(meldAsRanks);
+			
+		}
+		
+		return false;
+	}   	
     
 }

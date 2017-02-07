@@ -81,20 +81,18 @@ public final class RummyDriverEngine {
             
         }
    
-        //  tell the game who its players are.  If the operation fails
-        // give user an error message and exit.
+        // Define players for game
         String msg = game.setPlayers(p);
         if (msg != null) {
             errorMessage(msg);
             System.exit(1);
         }
 
-        // Tell each player who its game is
+        // Define game for players
         for (int i = 0; i < p.length; i++) {
             p[i].setGame(game, i);
         }
         
-        // start the game
         game.playGame();
 		
 	}
@@ -102,7 +100,7 @@ public final class RummyDriverEngine {
 	
 	/**
      * Gets a selection, based on user input, from a list of choices.
-     * Because this is a GUI-based driver, we to this by creating a
+     * Because this is a GUI-based driver, we do this by creating a
      * dialog-box with button for each choice.
      * 
      * @param title a possible title for a dialog box

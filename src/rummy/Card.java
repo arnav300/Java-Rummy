@@ -15,22 +15,48 @@ public class Card implements Comparator<Card> {
     private String IMAGE;
    
     /**
-     * Ctor for Card. All information is determined by id, which is 
+     * Constructor for Card. All information is determined by id, which is 
      * a value from 1 - 52
      * 
      * @param id
      */
     public Card(int id) {
-        ID = id;
+        this.ID = id;
         
         // Determine suit
-        SUIT = Suit.createSuit(id);
+        this.SUIT = Suit.createSuit(id);
         
         // Determine rank
-        RANK = Rank.createRank(id);
+        this.RANK = Rank.createRank(id);
         
-        if(id < 10) IMAGE = "images//default//0" + id + ".gif";
-        else IMAGE = "images//default//" + id + ".gif";
+        if(id < 10) this.IMAGE = "images//default//0" + id + ".gif";
+        else this.IMAGE = "images//default//" + id + ".gif";
+    }
+    
+    public Card(Suit suit, Rank rank){
+    	this.SUIT = suit;
+    	this.RANK = rank;
+    	
+    	// Determine ID
+    	int id = -1;
+    	if(suit.toChar() == 'C'){
+    		id = 0;
+    	}
+    	else if(suit.toChar() == 'D'){
+    		id = 13;
+    	}
+    	else if(suit.toChar() == 'H'){
+    		id = 26;
+    	}
+    	else if(suit.toChar() == 'S'){
+    		id = 39;
+    	}
+    	
+    	id += + rank.toInt();
+    	this.ID = id;
+		
+        if(this.ID < 10) this.IMAGE = "images//default//0" + this.ID + ".gif";
+        else this.IMAGE = "images//default//" + this.ID + ".gif";
     }
 
     public String getName() {
@@ -38,7 +64,7 @@ public class Card implements Comparator<Card> {
     }
 
     public int getRank() {
-        return RANK.toRank();
+        return RANK.toInt();
     }
 
     public int getID() {
@@ -53,7 +79,7 @@ public class Card implements Comparator<Card> {
         return IMAGE;
     }
     
-    enum Rank{
+    enum Rank implements Comparator<Rank>{
     	ACE("Ace", 1),
     	TWO("Two", 2),
     	THREE("Three", 3),
@@ -81,13 +107,13 @@ public class Card implements Comparator<Card> {
     		return name;
     	}
     	
-    	public int toRank(){
+    	public int toInt(){
     		return rank;
     	}
     	
     	public static Rank createRank(int id){
     		
-    		int rank = id % 13 + 1;
+    		int rank = (id - 1) % 13 + 1;
     		
     		switch(rank){
     		
@@ -122,9 +148,21 @@ public class Card implements Comparator<Card> {
     		
     			return null;
     		}
-    		
-    		
     	}
+    	
+        /**
+         * Implements Comparator's comparison operator for Rank enum. This
+         * enables Vector<Rank>.sort(Rank obj).
+         * 
+         * @return a negative integer, zero, or a positive integer as the
+         *         first argument is less than, equal to, or greater than the
+         *         second.
+         * 
+         */
+    	@Override
+    	public int compare(Rank r1, Rank r2) {
+    		return r1.rank - r2.rank;
+    	} 
 
     }
     
@@ -135,9 +173,12 @@ public class Card implements Comparator<Card> {
      *
      */
     enum Suit {
-    	SPADES, HEARTS, CLUBS, DIAMONDS;
+    	SPADES('S'), HEARTS('H'), CLUBS('C'), DIAMONDS('D');
+    	private final char suit;
     	
-    	private Suit(){}
+    	private Suit(char suit){
+    		this.suit = suit;
+    	}
     	
     	public static Suit createSuit(int id){
     		if(id >= 1 && id <= 13){
@@ -155,12 +196,34 @@ public class Card implements Comparator<Card> {
     		else 
     			return null;
     	}
+    	
+    	public static Suit createSuit(char suit){
+        	if(suit == 'C'){
+        		return Suit.CLUBS;
+        	}
+        	else if(suit== 'D'){
+        		return Suit.DIAMONDS;
+        	}
+        	else if(suit == 'H'){
+        		return Suit.HEARTS;
+        	}
+        	else if(suit == 'S'){
+        		return Suit.SPADES;
+        	}
+        	else{
+        		return null;
+        	}
+    	}
+    	
+    	public char toChar(){
+    		return suit;
+    	}
     }
 
     
     /**
      * Implements Comparator's comparison operator for Card class. This
-     * enables Vector<Card>.sort(Card obj).
+     * enables Vector<Card>.sort(Card obj). Sort's cards according to Rank.
      * 
      * @return a negative integer, zero, or a positive integer as the
      *         first argument is less than, equal to, or greater than the
@@ -169,19 +232,14 @@ public class Card implements Comparator<Card> {
      */
 	@Override
 	public int compare(Card c1, Card c2) {
-
-		return c1.getID() - c2.getID();
-	} 
-	
+		return c1.getRank() - c2.getRank();
+	}
 	
 	@Override
 	public boolean equals(Object otherCard){
-		
 		if( ((Card)otherCard).ID == this.ID) return true;
-		else return false;
-		
+		else return false;	
 	}
-
 }
 
 

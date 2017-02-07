@@ -1,20 +1,20 @@
 package rummy;
 
+import java.util.Vector;
+
 import game.GamePlayer;
 
 public class RummyMoveMeld extends RummyMoveAction {
 
-	private int [] indices = null;
+	private Vector<Card> meld= null;
 	
-	public RummyMoveMeld(GamePlayer source, int [] indices ) {
+	public RummyMoveMeld(GamePlayer source, Vector<Card> meld) {
 		super(source);
-		// TODO Auto-generated constructor stub
-		this.indices = indices;
-		
+		this.meld = meld;
 	}
 
-	public int [] getIndices(){
-		return this.indices;
+	public Vector<Card> getMeld(){
+		return this.meld;
 	}
 
 }
